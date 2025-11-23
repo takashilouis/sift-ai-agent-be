@@ -1,0 +1,71 @@
+"""
+Summarize Agent Node - Real LLM Integration
+
+Generates product summaries using Gemini LLM.
+"""
+
+from typing import Dict, Any
+from app.agents.llm_router import run_llm, get_system_instruction
+import json
+
+
+async def summarize_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Generate product summary using LLM
+    
+    Args:
+        state: Current agent state
+        task: Task configuration with 'from_task'
+        
+    Returns:
+        Summary text
+    """
+    # Get product data from previous task
+    product_data = None
+    
+    if task.get("from_task"):
+        from_task_ref = task["from_task"]
+        task_results = state.get("task_results", {})
+        
+        # Parse task reference
+        if ":" in from_task_ref:
+            task_idx = from_task_ref.split(":")[1]
+            prev_result = task_results.get(task_idx, {})
+            product_data = prev_result.get("product_data")
+    
+    if not product_data:
+        print("[Summarize Agent] No product data to summarize")
+        return {"summary": None, "error": "No product data"}
+    
+    print(f"[Summarize Agent] Generating summary for: {product_data.get('title', 'Unknown')}")
+    
+    try:
+        # Build prompt for LLM
+        prompt = f"""Analyze this product and provide a comprehensive summary.
+
+Product Information:
+{json.dumps(product_data, indent=2)}
+
+Create a summary that includes:
+1. **Overview**: Brief introduction to the product
+2. **Key Features**: Highlight 3-5 most important features
+3. **Value Proposition**: What makes this product stand out
+4. **Target Audience**: Who would benefit most from this product
+5. **Pros & Cons**: Balanced assessment
+
+Format as markdown with clear sections. Be concise but informative (300-400 words)."""
+        
+        # Call LLM
+        summary = await run_llm(
+            prompt=prompt,
+            temperature=0.7,
+            system_instruction=get_system_instruction("summarize")
+        )
+        
+        print(f"[Summarize Agent] Summary generated ({len(summary)} chars)")
+        
+        return {"summary": summary.strip()}
+        
+    except Exception as e:
+        print(f"[Summarize Agent] Error: {e}")
+        return {"summary": None, "error": str(e)}

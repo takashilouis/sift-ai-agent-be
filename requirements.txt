@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+langchain
+langgraph
+pydantic
+pydantic-settings
+python-dotenv
+httpx
+
+# LLM & AI Services
+google-generativeai>=0.8.0
+tavily-python>=0.3.0
+
+# Web Scraping
+playwright>=1.40.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0

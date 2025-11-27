@@ -24,6 +24,8 @@ app.add_middleware(
 
 # Include routers
 app.include_router(research_router.router, prefix=settings.API_V1_PREFIX)
+from app.routers import debug_router
+app.include_router(debug_router.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

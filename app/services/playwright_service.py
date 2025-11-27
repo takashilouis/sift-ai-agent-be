@@ -73,6 +73,23 @@ async def scrape_product_page(url: str, use_llm_extraction: bool = True) -> Dict
             # Extract product data
             if use_llm_extraction:
                 product_data = await extract_with_llm(url, html_content)
+                
+                # Fallback/Augment: If LLM missed critical fields, try selectors
+                if not product_data.price or not product_data.rating or not product_data.review_count:
+                    print("[Playwright Service] LLM missing critical data, trying selectors to augment...")
+                    selector_data = extract_with_selectors(url, html_content)
+                    
+                    if not product_data.price and selector_data.price:
+                        product_data.price = selector_data.price
+                        print(f"[Playwright Service] Recovered price from selectors: {product_data.price}")
+                        
+                    if not product_data.rating and selector_data.rating:
+                        product_data.rating = selector_data.rating
+                        print(f"[Playwright Service] Recovered rating from selectors: {product_data.rating}")
+                        
+                    if not product_data.review_count and selector_data.review_count:
+                        product_data.review_count = selector_data.review_count
+                        print(f"[Playwright Service] Recovered review_count from selectors: {product_data.review_count}")
             else:
                 product_data = extract_with_selectors(url, html_content)
             
@@ -189,8 +206,16 @@ def extract_amazon(url: str, soup: BeautifulSoup) -> ProductData:
     """Extract from Amazon product page"""
     title_elem = soup.select_one('#productTitle, h1.product-title')
     price_elem = soup.select_one('.a-price-whole, .a-price .a-offscreen')
-    rating_elem = soup.select_one('.a-icon-star .a-icon-alt, [data-hook="rating-out-of-text"]')
-    review_elem = soup.select_one('#acrCustomerReviewText, [data-hook="total-review-count"]')
+    
+    # Improved rating selectors
+    rating_elem = soup.select_one(
+        '#acrPopover, .a-icon-star .a-icon-alt, [data-hook="rating-out-of-text"], a.a-popover-trigger span'
+    )
+    
+    # Improved review count selectors
+    review_elem = soup.select_one(
+        '#acrCustomerReviewText, [data-hook="total-review-count"], #acrCustomerReviewLink span'
+    )
     
     # Extract features
     features = []
@@ -207,15 +232,21 @@ def extract_amazon(url: str, soup: BeautifulSoup) -> ProductData:
     # Parse rating
     rating = None
     if rating_elem:
-        rating_text = rating_elem.get_text()
-        match = re.search(r'(\d+\.?\d*)\s*out of', rating_text)
+        rating_text = rating_elem.get_text(strip=True)
+        # Look for "4.2 out of 5" or just "4.2"
+        match = re.search(r'(\d+\.?\d*)', rating_text)
         if match:
-            rating = float(match.group(1))
+            try:
+                val = float(match.group(1))
+                if 0 <= val <= 5:
+                    rating = val
+            except ValueError:
+                pass
     
     # Parse review count
     review_count = None
     if review_elem:
-        review_text = review_elem.get_text()
+        review_text = review_elem.get_text(strip=True)
         match = re.search(r'([\d,]+)', review_text.replace(',', ''))
         if match:
             review_count = int(match.group(1))

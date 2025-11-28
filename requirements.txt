@@ -8,7 +8,10 @@ python-dotenv
 httpx
 
 # LLM & AI Services
-google-generativeai>=0.8.0
+google-generativeai>=0.8.5
+langchain-google-genai>=2.0.10
+langchain>=0.3.0
+langgraph>=0.2.0
 tavily-python>=0.3.0
 
 # Web Scraping

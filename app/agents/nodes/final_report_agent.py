@@ -6,6 +6,7 @@ Synthesizes all task results into a comprehensive final report using LLM.
 
 from typing import Dict, Any
 from app.agents.llm_router import run_llm
+from app.services.database_service import DatabaseService
 import json
 
 
@@ -23,8 +24,11 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
     query = state.get("query", "")
     plan = state.get("plan", {})
     task_results = state.get("task_results", {})
+    session_id = state.get("session_id")
+    deep_research = state.get("deep_research", False)
+    report_id = state.get("report_id")
     
-    print("[Final Report] Synthesizing all results into final report")
+    print(f"[Final Report] Synthesizing all results into final report (Deep Research: {deep_research})")
     
     try:
         # Extract URLs from task results for evidence section
@@ -52,6 +56,10 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
             print(f"[Final Report] Truncating task results from {len(task_results_json)} to 50000 chars")
             task_results_json = task_results_json[:50000] + "\n... [truncated]"
 
+        # Determine target length and model based on mode
+        target_length = "1000-2000 words" if deep_research else "700-1600 words"
+        model_name = "gemini-2.5-pro" if deep_research else None  # None uses default (Flash)
+        
         # Build comprehensive prompt with explicit guidelines
         prompt = f"""Create a comprehensive research report based on the following analysis.
 
@@ -112,43 +120,59 @@ Customer sentiment and satisfaction levels (if review data was collected)
 - Common positive feedback
 - Common concerns or criticisms
 
-## Comparison (if applicable)
+**IMPORTANT:** Only include the Sentiment Analysis section if you have actual review or sentiment data. If no sentiment data is available, skip this section entirely.
+
+## Comparison
 How this product compares to alternatives (if comparison data exists)
+
+**IMPORTANT:** Only include the Comparison section if you have actual comparison data or information about alternative products. If no comparison data is available, skip this section entirely.
 
 ## Recommendations
 - Who might benefit from this product (based on features found)
 - Best use cases (based on specifications)
 - Value assessment (based on pricing and features)
 
-## Sources & Evidence
-List all URLs where information was gathered:
-{url_evidence if url_evidence else "- No URLs available"}
-
 ## Conclusion
 Summary of findings based on the collected data
+
+## References
+List of all sources used in this report:
+{url_evidence if url_evidence else "- No URLs available"}
 
 **FORMATTING:**
 - Use markdown formatting
 - Use bullet points for lists
 - Use tables for comparisons (markdown table format)
 - Be comprehensive but concise
-- Total length: 600-1500 words
-- Include the Sources & Evidence section with all URLs"""
+- Total length: {target_length}
+- Include the References section with all URLs at the very end
+- **CRITICAL:** Do NOT include sections marked as "IMPORTANT" if you don't have the relevant data. Simply omit those sections from the report."""
         
         # Generate final report
         final_report = await run_llm(
             prompt=prompt,
+            model=model_name,
             temperature=0.7,
-            max_tokens=17000
+            max_tokens=18000
         )
         
         print(f"[Final Report] Report generated ({len(final_report)} chars)")
         
         # Safeguard: Truncate if absurdly long (prevent UI crash)
-        if len(final_report) > 20000:
+        if len(final_report) > 21000:
              print(f"[Final Report] WARNING: Report too long ({len(final_report)} chars). Truncating to 20000.")
-             final_report = final_report[:20000] + "\n\n[Report truncated due to excessive length]"
+             final_report = final_report[:21000] + "\n\n[Report truncated due to excessive length]"
         
+        # Save report to database
+        try:
+            print(f"[Final Report] Saving report to database (session_id: {session_id}, report_id: {report_id})...")
+            db = DatabaseService()
+            await db.save_report(query=query, content=final_report, session_id=session_id, report_id=report_id)
+            print("[Final Report] Report saved to database")
+            await db.close()
+        except Exception as e:
+            print(f"[Final Report] Error saving to database: {e}")
+
         return {"final_report": final_report.strip()}
         
     except Exception as e:

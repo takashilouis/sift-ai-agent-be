@@ -28,6 +28,8 @@ from app.routers import debug_router
 app.include_router(debug_router.router, prefix=settings.API_V1_PREFIX)
 from app.routers import chat_router
 app.include_router(chat_router.router, prefix=settings.API_V1_PREFIX)
+from app.routers import history_router
+app.include_router(history_router.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

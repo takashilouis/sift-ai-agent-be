@@ -26,11 +26,22 @@ async def research_product(request: ResearchRequest):
         StreamingResponse with JSON chunks for each step
     """
     try:
+        # Generate report ID upfront
+        import uuid
+        report_id = str(uuid.uuid4())
+        
         # Create initial state
-        initial_state = create_initial_state(query=request.query)
+        initial_state = create_initial_state(
+            query=request.query,
+            deep_research=request.deep_research,
+            report_id=report_id
+        )
         
         # Stream the graph execution
         async def generate():
+            # Yield report ID as first chunk
+            yield json.dumps({"type": "report_id", "report_id": report_id}) + "\n"
+            
             async for chunk in stream_graph_output(research_graph, initial_state):
                 yield chunk
         
@@ -62,7 +73,10 @@ async def research_product_sync(request: ResearchRequest):
     """
     try:
         # Create initial state
-        initial_state = create_initial_state(query=request.query)
+        initial_state = create_initial_state(
+            query=request.query,
+            deep_research=request.deep_research
+        )
         
         # Run the graph to completion
         final_state = None

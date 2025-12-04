@@ -28,6 +28,9 @@ class AgentState(TypedDict):
     current_task_index: int
     final_report: Optional[str]
     error: Optional[str]
+    session_id: Optional[str]
+    deep_research: bool
+    report_id: Optional[str]
 
 
 # Map action names to agent functions
@@ -179,12 +182,14 @@ def create_research_graph():
     return compiled_graph
 
 
-def create_initial_state(query: str) -> AgentState:
+def create_initial_state(query: str, session_id: Optional[str] = None, deep_research: bool = False, report_id: Optional[str] = None) -> AgentState:
     """
     Create initial state for the workflow
     
     Args:
         query: User's research query
+        session_id: Optional session ID to link report to chat
+        deep_research: Whether to use Deep Research mode (Pro model)
         
     Returns:
         Initial AgentState
@@ -195,7 +200,10 @@ def create_initial_state(query: str) -> AgentState:
         task_results={},
         current_task_index=0,
         final_report=None,
-        error=None
+        error=None,
+        session_id=session_id,
+        deep_research=deep_research,
+        report_id=report_id
     )
 
 

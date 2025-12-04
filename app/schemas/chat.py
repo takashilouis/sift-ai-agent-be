@@ -10,6 +10,7 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     """Request for the chat endpoint"""
     messages: List[Message]
+    session_id: Optional[str] = None
     stream: bool = True
 
 class ChatResponse(BaseModel):

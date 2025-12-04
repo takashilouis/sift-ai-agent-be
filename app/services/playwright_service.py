@@ -26,7 +26,7 @@ class ProductData(BaseModel):
     brand: Optional[str] = None
     category: Optional[str] = None
     images: list[str] = Field(default_factory=list)
-
+    reviews: list[str] = Field(default_factory=list)
 
 async def scrape_product_page(url: str, use_llm_extraction: bool = True) -> Dict[str, Any]:
     """
@@ -52,16 +52,53 @@ async def scrape_product_page(url: str, use_llm_extraction: bool = True) -> Dict
             # Create page
             page = await browser.new_page()
             
-            # Set user agent to avoid bot detection
+            # Stealth: Randomize User-Agent
+            import random
+            user_agents = [
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
+            ]
+            user_agent = random.choice(user_agents)
+            
             await page.set_extra_http_headers({
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                'User-Agent': user_agent,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0'
             })
             
-            # Navigate to page
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            # Stealth: Hide webdriver property
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
             
-            # Wait a bit for dynamic content
-            await asyncio.sleep(2)
+            # Navigate to page with increased timeout
+            print(f"[Playwright Service] Navigating to {url} with timeout 60s...")
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            except Exception as e:
+                print(f"[Playwright Service] Navigation timeout/error: {e}. Trying to proceed with loaded content...")
+            
+            # Wait a bit for dynamic content (randomized)
+            delay = 2 + random.random() * 3  # 2-5 seconds
+            await asyncio.sleep(delay)
+            
+            # Scroll down to trigger lazy loading
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
+            await asyncio.sleep(1)
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(1)
             
             # Get page content
             html_content = await page.content()
@@ -155,6 +192,7 @@ Extract the following information:
 - brand: Brand name
 - category: Product category
 - images: List of image URLs (if visible in content)
+- review: list of latest 5 user reviews of the product
 
 If any field cannot be determined, use null."""
     

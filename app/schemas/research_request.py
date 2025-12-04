@@ -8,11 +8,16 @@ class ResearchRequest(BaseModel):
         default="product-analysis",
         description="Research mode: product-analysis, comparison, sentiment-check"
     )
+    deep_research: bool = Field(
+        default=False,
+        description="Enable Deep Research mode using Pro model for more detailed reports"
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "query": "research this product: Apple AirPods 4",
-                "mode": "product-analysis"
+                "mode": "product-analysis",
+                "deep_research": False
             }
         }

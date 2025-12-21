@@ -8,6 +8,7 @@ from typing import Dict, Any
 from app.agents.llm_router import run_llm
 from app.services.database_service import DatabaseService
 import json
+from datetime import datetime
 
 
 async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict[str, Any]:
@@ -31,18 +32,33 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
     print(f"[Final Report] Synthesizing all results into final report (Deep Research: {deep_research})")
     
     try:
-        # Extract URLs from task results for evidence section
+        # Extract URLs and images from task results for evidence section
         urls = []
+        product_images = {}  # {product_name: image_url}
+        
         for task_idx, result in task_results.items():
             if isinstance(result, dict):
                 # Extract URLs from search results
                 if "results" in result and isinstance(result["results"], list):
                     for item in result["results"]:
-                        if isinstance(item, dict) and "url" in item:
-                            urls.append(item["url"])
+                        if isinstance(item, dict):
+                            if "url" in item:
+                                urls.append(item["url"])
+                            # Extract images from Tavily results if available
+                            if "title" in item and "image" in item and item["image"]:
+                                product_images[item["title"]] = item["image"]
+                                
                 # Extract URL from scrape results
                 if "url" in result:
                     urls.append(result["url"])
+                # Extract images from scraped product data
+                if "product_data" in result and isinstance(result["product_data"], dict):
+                    product_data = result["product_data"]
+                    product_name = product_data.get("title", "Product")
+                    images = product_data.get("images", [])
+                    if images and len(images) > 0:
+                        # Use first image
+                        product_images[product_name] = images[0]
         
         # Remove duplicates while preserving order
         unique_urls = list(dict.fromkeys(urls))
@@ -57,11 +73,13 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
             task_results_json = task_results_json[:50000] + "\n... [truncated]"
 
         # Determine target length and model based on mode
-        target_length = "1000-2000 words" if deep_research else "700-1600 words"
+        target_length = "1100-2000 words" if deep_research else "700-1600 words"
         model_name = "gemini-2.5-pro" if deep_research else None  # None uses default (Flash)
         
         # Build comprehensive prompt with explicit guidelines
-        prompt = f"""Create a comprehensive research report based on the following analysis.
+        prompt = f"""Current Date: {datetime.now().strftime('%B %d, %Y')}
+
+Create a comprehensive research report based on the following analysis.
 
 **Original Query:** {query}
 
@@ -70,6 +88,9 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
 
 **Analysis Results:**
 {task_results_json}
+
+**Product Images Available:**
+{json.dumps(product_images, indent=2) if product_images else "No images available"}
 
 **CRITICAL GUIDELINES - READ CAREFULLY:**
 1. Focus ONLY on actual data found in the analysis results above
@@ -83,7 +104,7 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
 9. Present the information as a product research report, not a product existence investigation
 10. **IMPORTANT**: Include inline URL citations with bold retailer names
     - Extract the retailer/website name from the URL (e.g., Amazon, Best Buy, Target, eBay)
-    - Format as: "Product Name - $XX.XX (**[Amazon](URL)**)" with bold blue link
+    - Format as: "Product Name - $XX.XX (**[Amazon](URL)**)\" with bold blue link
     - For features: "Feature description (**[Best Buy](URL)**)"
     - For pricing: "$XX.XX at **[Target](URL)**"
     - Make retailer names BOLD and use markdown links: **[RetailerName](URL)**
@@ -91,18 +112,28 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
       * "Matcha Whisk Set - $15.99 (**[Amazon](https://amazon.com/...)**)"
       * "Enhanced ANC feature (**[Best Buy](https://bestbuy.com/...)**)"
       * "$219.99 at **[Target](https://target.com/...)**"
+11. **Product Images**: When product images are available in the "Product Images Available" section above:
+    - Include images in the Product Overview section using markdown image syntax
+    - Format: ![Product Name](image_url)
+    - Place images near the product description
+    - For product comparisons, show images in a markdown table for side-by-side display
+    - Example single product: ![Apple AirPods Pro](https://example.com/airpods.jpg)
+    - Example comparison table:
+      | Product A | Product B |
+      |-----------|-----------|
+      | ![Product A](url1) | ![Product B](url2) |
+      | Description A | Description B |
 
 Create a professional research report with the following structure:
 
 # Product Research Report
 
-## Executive Summary
-Brief overview of findings based on the data collected (2-3 paragraphs)
-- Summarize key features found
-- Mention pricing information discovered
-- Note any standout characteristics
-
 ## Product Overview
+[If product images are available, display them here in a row using markdown:
+![Product Name](image_url) ![Product Name 2](image_url2)
+This gives users a visual overview of the products being compared/analyzed]
+
+[Then continue with the product overview text...]
 Detailed product information based on search results and scraped data
 - Features and specifications found
 - Design and build quality mentions
@@ -159,9 +190,9 @@ List of all sources used in this report:
         print(f"[Final Report] Report generated ({len(final_report)} chars)")
         
         # Safeguard: Truncate if absurdly long (prevent UI crash)
-        if len(final_report) > 21000:
-             print(f"[Final Report] WARNING: Report too long ({len(final_report)} chars). Truncating to 20000.")
-             final_report = final_report[:21000] + "\n\n[Report truncated due to excessive length]"
+        if len(final_report) > 24000:
+             print(f"[Final Report] WARNING: Report too long ({len(final_report)} chars). Truncating to 24000.")
+             final_report = final_report[:24000] + "\n\n[Report truncated due to excessive length]"
         
         # Save report to database
         try:

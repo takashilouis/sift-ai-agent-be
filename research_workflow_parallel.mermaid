@@ -1,0 +1,39 @@
+flowchart TD
+    Start([User Query]) --> Planner[Planner Agent<br/>ReAct Loop<br/>Gemini LLM]
+    
+    Planner --> AnalyzeDeps[Analyze Dependencies<br/>Check Task Requirements]
+    AnalyzeDeps --> CheckReady{Ready to<br/>Execute?}
+    
+    CheckReady -->|Yes| ParallelExec[Parallel Execution<br/>Execute Independent Tasks]
+    CheckReady -->|No| WaitDeps[Wait for Dependencies<br/>Previous Results]
+    
+    WaitDeps --> ParallelExec
+    
+    ParallelExec --> SearchAgent[Search Agent<br/>Tavily API]
+    ParallelExec --> Scraper1[Scraper Agent 1<br/>Smart Scraper<br/>Playwright + LLM]
+    ParallelExec --> Scraper2[Scraper Agent 2<br/>Smart Scraper<br/>Playwright + LLM]
+    ParallelExec --> SummarizeAgent[Summarize Agent<br/>Gemini LLM]
+    
+    SearchAgent --> MergeResults[Merge Parallel Results<br/>Collect All Outputs]
+    Scraper1 --> MergeResults
+    Scraper2 --> MergeResults
+    SummarizeAgent --> MergeResults
+    
+    MergeResults --> CheckComplete{Sufficient<br/>Results?}
+    
+    CheckComplete -->|No| Planner
+    CheckComplete -->|Yes| FinalReport[Final Report Agent<br/>Gemini LLM + PostgreSQL]
+    
+    FinalReport --> End([Return Final State])
+    
+    style Planner fill:#b3e5fc,stroke:#0277bd,stroke-width:2px,color:#000
+    style ParallelExec fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style SearchAgent fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style Scraper1 fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style Scraper2 fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style SummarizeAgent fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style FinalReport fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style CheckReady fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    style CheckComplete fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    style Start fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
+    style End fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000

@@ -11,7 +11,7 @@ from typing import AsyncGenerator
 router = APIRouter(prefix="/research", tags=["research"])
 
 
-@router.post("/", response_class=StreamingResponse)
+@router.post("", response_class=StreamingResponse)
 async def research_product(request: ResearchRequest):
     """
     Perform product research using the LLM-based agent workflow

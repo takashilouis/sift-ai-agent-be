@@ -16,6 +16,7 @@ class TavilyService:
             response = self.client.search(
                 query=query,
                 search_depth="advanced",
+                include_images=True,
                 max_results=max_results
             )
             return response.get("results", [])

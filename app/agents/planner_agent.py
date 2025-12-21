@@ -23,6 +23,7 @@ class Task(BaseModel):
     query: Optional[str] = None
     from_task: Optional[str] = Field(None, description="Reference to previous task (e.g., 'task:0')")
     description: Optional[str] = None
+    url_index: Optional[int] = Field(0, description="Index of URL to use from list (default 0)")
 
 
 class ResearchPlan(BaseModel):
@@ -32,7 +33,12 @@ class ResearchPlan(BaseModel):
     reasoning: Optional[str] = Field(None, description="Why this plan was chosen")
 
 
-PLANNER_SYSTEM_PROMPT = """You are an expert research planner for e-commerce product analysis.
+from datetime import datetime
+
+
+PLANNER_SYSTEM_PROMPT = f"""Current Date: {datetime.now().strftime('%B %d, %Y')}
+
+You are an expert research planner for e-commerce product analysis.
 
 Your job is to analyze user queries and create structured research plans.
 
@@ -46,51 +52,59 @@ Available actions:
 
 Rules:
 1. If query contains a URL, start with "scrape"
-2. If no URL, start with "search" then "scrape"
-3. Always include "final_report" as the last task
-4. Use "from_task" to reference previous task outputs (e.g., "task:0", "task:1")
-5. For comparison, ensure multiple products are scraped first
+2. If no URL, start with "search" then generate MULTIPLE "scrape" tasks for top results.
+3. For "scrape" tasks following a "search", use 'url_index' to target different results (0, 1, 2).
+4. Always include "final_report" as the last task
+5. Use "from_task" to reference previous task outputs (e.g., "task:0", "task:1")
+6. For comparison, ensure multiple products are scraped first
 
 Examples:
 
 Query: "Apple AirPods 4"
 Plan:
-{
+{{
   "intent": "product_research",
+  "reasoning": "Search for top results, scrape the first 3 distinct products to get a good overview, then summarize and analyze sentiment for each.",
   "tasks": [
-    {"action": "search", "query": "Apple AirPods 4"},
-    {"action": "scrape", "from_task": "task:0"},
-    {"action": "summarize", "from_task": "task:1"},
-    {"action": "sentiment", "from_task": "task:1"},
-    {"action": "final_report"}
+    {{"action": "search", "query": "Apple AirPods 4 product page"}},
+    {{"action": "scrape", "from_task": "task:0", "url_index": 0}},
+    {{"action": "summarize", "from_task": "task:1"}},
+    {{"action": "sentiment", "from_task": "task:1"}},
+    {{"action": "scrape", "from_task": "task:0", "url_index": 1}},
+    {{"action": "summarize", "from_task": "task:4"}},
+    {{"action": "sentiment", "from_task": "task:4"}},
+    {{"action": "scrape", "from_task": "task:0", "url_index": 2}},
+    {{"action": "summarize", "from_task": "task:7"}},
+    {{"action": "sentiment", "from_task": "task:7"}},
+    {{"action": "final_report"}}
   ]
-}
+}}
 
 Query: "Compare Apple AirPods 4 vs Samsung Galaxy Buds"
 Plan:
-{
+{{
   "intent": "product_comparison",
   "tasks": [
-    {"action": "search", "query": "Apple AirPods 4"},
-    {"action": "scrape", "from_task": "task:0"},
-    {"action": "search", "query": "Samsung Galaxy Buds"},
-    {"action": "scrape", "from_task": "task:2"},
-    {"action": "compare", "from_task": "task:1,task:3"},
-    {"action": "final_report"}
+    {{"action": "search", "query": "Apple AirPods 4"}},
+    {{"action": "scrape", "from_task": "task:0", "url_index": 0}},
+    {{"action": "search", "query": "Samsung Galaxy Buds"}},
+    {{"action": "scrape", "from_task": "task:2", "url_index": 0}},
+    {{"action": "compare", "from_task": "task:1,task:3"}},
+    {{"action": "final_report"}}
   ]
-}
+}}
 
 Query: "https://www.amazon.com/dp/B0D1XD1ZV3"
 Plan:
-{
+{{
   "intent": "product_analysis",
   "tasks": [
-    {"action": "scrape", "query": "https://www.amazon.com/dp/B0D1XD1ZV3"},
-    {"action": "summarize", "from_task": "task:0"},
-    {"action": "sentiment", "from_task": "task:0"},
-    {"action": "final_report"}
+    {{"action": "scrape", "query": "https://www.amazon.com/dp/B0D1XD1ZV3"}},
+    {{"action": "summarize", "from_task": "task:0"}},
+    {{"action": "sentiment", "from_task": "task:0"}},
+    {{"action": "final_report"}}
   ]
-}
+}}
 
 Respond ONLY with valid JSON matching the ResearchPlan schema.
 """

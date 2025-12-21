@@ -9,7 +9,7 @@ import asyncio
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-@router.post("/", response_class=StreamingResponse)
+@router.post("", response_class=StreamingResponse)
 async def chat_endpoint(request: ChatRequest):
     """
     Chat with the AI agent.
@@ -74,7 +74,7 @@ async def chat_endpoint(request: ChatRequest):
             
             async for event in chat_graph.astream_events(initial_state, version="v1"):
                 kind = event["event"]
-                
+                #print("kind: ",kind)
                 # Stream LLM tokens
                 if kind == "on_chat_model_stream":
                     content = event["data"]["chunk"].content

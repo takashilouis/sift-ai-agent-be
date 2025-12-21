@@ -203,3 +203,80 @@ async def get_chat_session(session_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         await db.close()
+
+
+@router.delete("/research/{report_id}")
+async def delete_research_report(report_id: str) -> Dict[str, Any]:
+    """
+    Delete a research report by ID
+    
+    Args:
+        report_id: UUID of the research report to delete
+        
+    Returns:
+        Success message
+    """
+    db = DatabaseService()
+    try:
+        await db.connect()
+        
+        result = await db.conn.execute(
+            "DELETE FROM research_reports WHERE id = $1",
+            report_id
+        )
+        
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Research report not found")
+        
+        return {"success": True, "message": "Research report deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[History API] Delete research report error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await db.close()
+
+
+@router.delete("/chat/{session_id}")
+async def delete_chat_session(session_id: str) -> Dict[str, Any]:
+    """
+    Delete a chat session and all its messages
+    
+    Args:
+        session_id: UUID of the chat session to delete
+        
+    Returns:
+        Success message
+    """
+    db = DatabaseService()
+    try:
+        await db.connect()
+        
+        # Delete messages first (foreign key constraint)
+        await db.conn.execute(
+            "DELETE FROM chat_messages WHERE session_id = $1",
+            session_id
+        )
+        
+        # Delete session
+        result = await db.conn.execute(
+            "DELETE FROM chat_sessions WHERE id = $1",
+            session_id
+        )
+        
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Chat session not found")
+        
+        return {"success": True, "message": "Chat session deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[History API] Delete chat session error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await db.close()

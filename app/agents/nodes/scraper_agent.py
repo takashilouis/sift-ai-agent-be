@@ -42,8 +42,19 @@ async def scraper_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dic
             task_idx = from_task_ref.split(":")[1]
             prev_result = task_results.get(task_idx, {})
             
-            # Get URL from previous task
-            url = prev_result.get("primary_url") or prev_result.get("url")
+            # Get URL from previous task with optional index
+            if "product_urls" in prev_result and isinstance(prev_result["product_urls"], list):
+                urls = prev_result["product_urls"]
+                # Check if task specifies an index
+                url_index = task.get("url_index", 0)
+                if 0 <= url_index < len(urls):
+                    url = urls[url_index]
+                else:
+                    # Fallback to first if index out of bounds
+                    url = urls[0] if urls else None
+            else:
+                # Fallback to single URL
+                url = prev_result.get("primary_url") or prev_result.get("url")
     
     if not url:
         print("[Scraper Agent] No URL to scrape")

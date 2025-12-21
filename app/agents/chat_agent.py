@@ -19,6 +19,7 @@ from langchain_core.tools import tool
 import asyncio
 import json
 from contextvars import ContextVar
+from datetime import datetime
 
 # Initialize services
 tavily_service = TavilyService()
@@ -117,7 +118,9 @@ async def chat_node(state: ChatState):
     current_session_id.set(session_id)
     
     # Define system instruction
-    system_instruction = """You are a helpful E-commerce AI Assistant. 
+    system_instruction = f"""Current Date: {datetime.now().strftime('%B %d, %Y')}
+
+You are a helpful E-commerce AI Assistant. 
 You help users research products, compare options, and find the best deals.
 You have access to tools to search the web, scrape websites, create plans, and perform deep research.
 

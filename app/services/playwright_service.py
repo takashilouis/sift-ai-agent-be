@@ -28,9 +28,11 @@ class ProductData(BaseModel):
     images: list[str] = Field(default_factory=list)
     reviews: list[str] = Field(default_factory=list)
 
+from app.services.proxy_service import proxy_service
+
 async def scrape_product_page(url: str, use_llm_extraction: bool = True) -> Dict[str, Any]:
     """
-    Scrape product page using Playwright
+    Scrape product page using Playwright with rotating proxies
     
     Args:
         url: Product page URL to scrape
@@ -43,98 +45,141 @@ async def scrape_product_page(url: str, use_llm_extraction: bool = True) -> Dict
     
     try:
         async with async_playwright() as p:
-            # Launch browser
+            # Launch browser (no global proxy)
             browser = await p.chromium.launch(
                 headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']
+                args=[
+                    '--no-sandbox', 
+                    '--disable-setuid-sandbox', 
+                    '--disable-blink-features=AutomationControlled',
+                    '--start-maximized' 
+                ]
             )
-            
-            # Create page
-            page = await browser.new_page()
             
             # Stealth: Randomize User-Agent
             import random
             user_agents = [
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0'
             ]
-            user_agent = random.choice(user_agents)
             
-            await page.set_extra_http_headers({
-                'User-Agent': user_agent,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Cache-Control': 'max-age=0'
-            })
+            # Retry logic for blocking/captchas
+            max_retries = 3
+            last_error = None
             
-            # Stealth: Hide webdriver property
-            await page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-            """)
-            
-            # Navigate to page with increased timeout
-            print(f"[Playwright Service] Navigating to {url} with timeout 60s...")
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            except Exception as e:
-                print(f"[Playwright Service] Navigation timeout/error: {e}. Trying to proceed with loaded content...")
-            
-            # Wait a bit for dynamic content (randomized)
-            delay = 2 + random.random() * 3  # 2-5 seconds
-            await asyncio.sleep(delay)
-            
-            # Scroll down to trigger lazy loading
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
-            await asyncio.sleep(1)
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await asyncio.sleep(1)
-            
-            # Get page content
-            html_content = await page.content()
+            for attempt in range(max_retries):
+                context = None
+                try:
+                    # Determine proxy and UA for this attempt
+                    current_proxy = None
+                    if attempt > 0:
+                        print("Rotating User-Agent")
+                        raw_proxy = await proxy_service.get_next_proxy()
+                        if raw_proxy:
+                            current_proxy = {"server": f"http://{raw_proxy}"}
+                            print(f"[Playwright Service] Retry attempt {attempt+1}/{max_retries} using proxy: {raw_proxy}")
+                        else:
+                            print(f"[Playwright Service] Retry attempt {attempt+1}/{max_retries} (No proxy available)")
+                    
+                    user_agent = random.choice(user_agents)
+                    
+                    # Create isolated context with proxy and UA
+                    context = await browser.new_context(
+                        user_agent=user_agent,
+                        proxy=current_proxy,
+                        viewport={'width': 1920, 'height': 1080},
+                        device_scale_factor=1,
+                    )
+                    
+                    # Stealth: Hide webdriver property
+                    await context.add_init_script("""
+                        Object.defineProperty(navigator, 'webdriver', {
+                            get: () => undefined
+                        });
+                    """)
+                    
+                    page = await context.new_page()
+                    
+                    # Extra headers
+                    await page.set_extra_http_headers({
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Upgrade-Insecure-Requests': '1'
+                    })
+                    
+                    # Navigate
+                    print(f"[Playwright Service] Navigating to {url} (Attempt {attempt+1})")
+                    try:
+                        await page.goto(url, wait_until="domcontentloaded", timeout=20000) # Increased slightly for proxies
+                    except Exception as e:
+                        print(f"[Playwright Service] Navigation timeout/error: {e}")
+                        # If meaningful error, maybe raise to trigger retry logic
+                        
+                    # Human-like delays
+                    delay = 1 + random.random() * 2
+                    await asyncio.sleep(delay)
+                    
+                    # Scroll & Mouse
+                    try:
+                        await page.mouse.move(random.randint(100, 500), random.randint(100, 500))
+                        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        await asyncio.sleep(1)
+                    except:
+                        pass
+                        
+                    # Get content
+                    html_content = await page.content()
+                    content_length = len(html_content)
+                    print(f"[Playwright Service] Page loaded, length: {content_length}")
+                    
+                    # Block detection
+                    if content_length < 15000:
+                        raise Exception(f"Content too short (<15KB). Blocked/Captcha detected.")
+                    
+                    # If we got here, success! 
+                    # Extract data...
+                    
+                    # Close context to clean up
+                    # await context.close() (do this in finally or after extraction)
+                    
+                    # Extract product data (logic remains same)
+                    if use_llm_extraction:
+                        product_data = await extract_with_llm(url, html_content)
+                        # ... fallback ...
+                        if not product_data.price or not product_data.rating or not product_data.review_count:
+                            selector_data = extract_with_selectors(url, html_content)
+                            if not product_data.price and selector_data.price: product_data.price = selector_data.price
+                            if not product_data.rating and selector_data.rating: product_data.rating = selector_data.rating
+                            if not product_data.review_count and selector_data.review_count: product_data.review_count = selector_data.review_count
+                    else:
+                        product_data = extract_with_selectors(url, html_content)
+                    
+                    await context.close()
+                    await browser.close()
+                    return product_data.model_dump()
+                    
+                except Exception as e:
+                    print(f"[Playwright Service] Error in attempt {attempt+1}: {e}")
+                    last_error = e
+                    if context:
+                        await context.close()
+                    # Continue loop to retry
             
             await browser.close()
             
-            print(f"[Playwright Service] Page loaded, HTML length: {len(html_content)}")
-            
-            # Extract product data
-            if use_llm_extraction:
-                product_data = await extract_with_llm(url, html_content)
-                
-                # Fallback/Augment: If LLM missed critical fields, try selectors
-                if not product_data.price or not product_data.rating or not product_data.review_count:
-                    print("[Playwright Service] LLM missing critical data, trying selectors to augment...")
-                    selector_data = extract_with_selectors(url, html_content)
-                    
-                    if not product_data.price and selector_data.price:
-                        product_data.price = selector_data.price
-                        print(f"[Playwright Service] Recovered price from selectors: {product_data.price}")
-                        
-                    if not product_data.rating and selector_data.rating:
-                        product_data.rating = selector_data.rating
-                        print(f"[Playwright Service] Recovered rating from selectors: {product_data.rating}")
-                        
-                    if not product_data.review_count and selector_data.review_count:
-                        product_data.review_count = selector_data.review_count
-                        print(f"[Playwright Service] Recovered review_count from selectors: {product_data.review_count}")
-            else:
-                product_data = extract_with_selectors(url, html_content)
-            
-            return product_data.model_dump()
+            # If all retries failed
+            return {
+                "url": url,
+                "title": "Access Denied / Captcha",
+                "price": None,
+                "rating": None,
+                "error": f"Failed after {max_retries} attempts. Last error: {str(last_error)}"
+            }
             
     except Exception as e:
         print(f"[Playwright Service] Error scraping {url}: {e}")
-        # Return minimal data on error
         return {
             "url": url,
             "title": None,
@@ -159,6 +204,24 @@ async def extract_with_llm(url: str, html_content: str) -> ProductData:
     """
     # Clean HTML to reduce token usage
     soup = BeautifulSoup(html_content, 'lxml')
+    
+    # Extract image URLs BEFORE removing tags
+    image_urls = []
+    for img in soup.find_all('img'):
+        src = img.get('src') or img.get('data-src') or img.get('srcset', '').split()[0] if img.get('srcset') else None
+        if src and src.startswith('http'):
+            # Filter out small icons and logos
+            if 'logo' not in src.lower() and 'icon' not in src.lower():
+                # Clean URL: remove parameters after image extension
+                # e.g., .jpg;maxHeight=128 -> .jpg
+                import re
+                cleaned_src = re.sub(r'(\.(jpg|jpeg|png|webp|gif));.*', r'\1', src, flags=re.IGNORECASE)
+                image_urls.append(cleaned_src)
+    
+    # Remove duplicates while preserving order
+    image_urls = list(dict.fromkeys(image_urls))[:10]  # Keep first 10 unique images
+    
+    print(f"[Playwright Service] Found {len(image_urls)} image URLs")
     
     # Remove script and style tags
     for tag in soup(['script', 'style', 'noscript', 'svg']):
@@ -191,8 +254,9 @@ Extract the following information:
 - availability: Stock status (In Stock, Out of Stock, etc.)
 - brand: Brand name
 - category: Product category
-- images: List of image URLs (if visible in content)
-- review: list of latest 5 user reviews of the product
+- reviews: List of latest 5 user reviews of the product
+
+NOTE: Images will be extracted separately from HTML, so you can leave the images field empty.
 
 If any field cannot be determined, use null."""
     
@@ -205,17 +269,21 @@ If any field cannot be determined, use null."""
             system_instruction=get_system_instruction("extract")
         )
         
-        # Set URL
+        # Set URL and images
         product_data.url = url
+        product_data.images = image_urls
         
-        print(f"[Playwright Service] Extracted: {product_data.title}")
+        print(f"[Playwright Service] Extracted: {product_data.title} with {len(product_data.images)} images")
         
         return product_data
         
     except Exception as e:
         print(f"[Playwright Service] LLM extraction failed: {e}")
         # Fallback to selector-based extraction
-        return extract_with_selectors(url, html_content)
+        fallback_data = extract_with_selectors(url, html_content)
+        fallback_data.images = image_urls  # Add images to fallback data
+        return fallback_data
+
 
 
 def extract_with_selectors(url: str, html_content: str) -> ProductData:

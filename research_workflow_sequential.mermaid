@@ -1,0 +1,42 @@
+flowchart TD
+    Start([User Query]) --> Planner[Planner Agent<br/>planner_node<br/>Creates Task Plan]
+    
+    Planner --> TaskExecutor[Task Executor<br/>task_executor_node]
+    
+    TaskExecutor --> CheckTasks{More Tasks?}
+    
+    CheckTasks -->|Yes| Dispatch{Action Type}
+    CheckTasks -->|No| ExtractReport[Extract Final Report<br/>from task_results]
+    
+    Dispatch -->|search| SearchAgent[Search Agent<br/>Tavily API]
+    Dispatch -->|scrape| ScraperAgent[Scraper Agent<br/>Playwright + LLM]
+    Dispatch -->|summarize| SummarizeAgent[Summarize Agent<br/>Gemini LLM]
+    Dispatch -->|sentiment| SentimentAgent[Sentiment Agent<br/>Gemini LLM]
+    Dispatch -->|compare| CompareAgent[Compare Agent<br/>Gemini LLM]
+    Dispatch -->|final_report| FinalReportAgent[Final Report Agent<br/>Gemini LLM + PostgreSQL<br/>LAST TASK]
+    
+    SearchAgent --> StoreResult[Store Result]
+    ScraperAgent --> StoreResult
+    SummarizeAgent --> StoreResult
+    SentimentAgent --> StoreResult
+    CompareAgent --> StoreResult
+    FinalReportAgent --> StoreResult
+    
+    StoreResult --> Increment[Increment Task Index]
+    Increment --> CheckTasks
+    
+    ExtractReport --> End([Return Final State])
+    
+    style Planner fill:#b3e5fc,stroke:#0277bd,stroke-width:2px,color:#000
+    style TaskExecutor fill:#b3e5fc,stroke:#0277bd,stroke-width:2px,color:#000
+    style SearchAgent fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style ScraperAgent fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style SummarizeAgent fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style SentimentAgent fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style CompareAgent fill:#ce93d8,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style FinalReportAgent fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px,color:#000
+    style CheckTasks fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    style Dispatch fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    style Start fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
+    style End fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
+

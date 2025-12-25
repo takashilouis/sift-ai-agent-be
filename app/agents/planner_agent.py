@@ -223,11 +223,24 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     
     print(f"[Planner Node] Planning for query: {query}")
     
+    # Emit planning start status
+    state["node_status"] = "planning"
+    state["node_message"] = f"Analyzing query: {query}"
+    
     plan = await create_plan(query)
     
     state["plan"] = plan.model_dump()
     state["task_results"] = {}
     state["current_task_index"] = 0
+    
+    # Emit planning completion status
+    state["node_status"] = "completed"
+    state["node_message"] = f"Created research plan with {len(plan.tasks)} tasks"
+    state["plan_summary"] = {
+        "intent": plan.intent,
+        "total_tasks": len(plan.tasks),
+        "task_types": [task.action for task in plan.tasks]
+    }
     
     print(f"[Planner Node] Plan created: {plan.intent} with {len(plan.tasks)} tasks")
     

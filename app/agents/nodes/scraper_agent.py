@@ -58,23 +58,40 @@ async def scraper_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dic
     
     if not url:
         print("[Scraper Agent] No URL to scrape")
+        state["agent_status"] = "error"
+        state["agent_message"] = "No URL provided for scraping"
         return {"error": "No URL provided"}
     
     print(f"[Scraper Agent] Scraping URL: {url}")
+    
+    # Emit scraping start status
+    state["agent_status"] = "scraping"
+    state["agent_message"] = f"Scraping product page: {url}"
     
     try:
         # Scrape the product page
         product_data = await scrape_product_page(url, use_llm_extraction=True)
         
-        print(f"[Scraper Agent] Scraped: {product_data.get('title', 'Unknown')}")
+        product_title = product_data.get('title', 'Unknown Product')
+        print(f"[Scraper Agent] Scraped: {product_title}")
+        
+        # Emit scraping completion status
+        state["agent_status"] = "completed"
+        state["agent_message"] = f"Extracted data for: {product_title}"
         
         return {
             "product_data": product_data,
-            "url": url
+            "url": url,
+            "product_title": product_title
         }
         
     except Exception as e:
         print(f"[Scraper Agent] Error: {e}")
+        
+        # Emit error status
+        state["agent_status"] = "error"
+        state["agent_message"] = f"Scraping failed: {str(e)}"
+        
         return {
             "product_data": None,
             "url": url,

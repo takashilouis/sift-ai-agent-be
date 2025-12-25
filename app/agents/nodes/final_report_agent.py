@@ -31,6 +31,10 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
     
     print(f"[Final Report] Synthesizing all results into final report (Deep Research: {deep_research})")
     
+    # Emit report generation start status
+    state["agent_status"] = "generating_report"
+    state["agent_message"] = "Synthesizing all results into final report..."
+    
     try:
         # Extract URLs and images from task results for evidence section
         urls = []
@@ -67,7 +71,63 @@ async def final_report_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dict
         url_evidence = "\n".join([f"- {url}" for url in unique_urls[:10]])  # Limit to 10 URLs
         
         # Serialize task results and truncate if too large to prevent massive context
-        task_results_json = json.dumps(task_results, indent=2)
+        # CRITICAL: Remove raw_html from product_data to prevent bloat
+        cleaned_task_results = {}
+        valid_products_count = 0
+        failed_scrapes = []
+        
+        for task_id, result in task_results.items():
+            cleaned_result = result.copy()
+            if "product_data" in cleaned_result and isinstance(cleaned_result["product_data"], dict):
+                # Remove raw_html which can be massive (100k+ chars)
+                cleaned_product_data = cleaned_result["product_data"].copy()
+                cleaned_product_data.pop("raw_html", None)
+                
+                # Track valid vs failed products
+                title = cleaned_product_data.get("title", "")
+                if title and not any(fail_indicator in title.lower() for fail_indicator in 
+                                   ["access denied", "captcha", "error", "blocked", "unknown product"]):
+                    valid_products_count += 1
+                else:
+                    failed_scrapes.append({"task_id": task_id, "title": title, "url": result.get("url")})
+                
+                cleaned_result["product_data"] = cleaned_product_data
+            cleaned_task_results[task_id] = cleaned_result
+        
+        # Check if we have enough valid data for the research intent
+        intent = plan.get("intent", "")
+        if intent == "product_comparison" and valid_products_count < 2:
+            error_msg = f"""# Research Failed: Insufficient Product Data
+
+**Query:** {query}
+
+**Issue:** This research requires comparing multiple products, but only {valid_products_count} product(s) could be successfully scraped.
+
+**Failed Scrapes:**
+"""
+            for failed in failed_scrapes:
+                error_msg += f"\n- **URL:** {failed.get('url', 'N/A')}\n  **Reason:** {failed.get('title', 'Unknown error')}\n"
+            
+            error_msg += """\n**Why This Happened:**
+Amazon and other e-commerce sites use anti-bot protection (captchas, rate limiting, IP blocking) to prevent automated scraping. The scraper attempted multiple retries with different proxies but was still blocked.
+
+**Recommendations:**
+1. **Try again later** - The blocking may be temporary
+2. **Use different products** - Try searching for products on less restrictive sites
+3. **Manual research** - For critical comparisons, manual research may be more reliable
+4. **Deep Research Mode** - Enable deep research for more sophisticated scraping strategies
+
+**What We Could Scrape:**
+"""
+            if valid_products_count > 0:
+                error_msg += f"Successfully scraped {valid_products_count} product(s), but comparison requires at least 2.\n"
+            else:
+                error_msg += "No products could be scraped successfully.\n"
+            
+            print(f"[Final Report] Insufficient data: {valid_products_count} valid products, {len(failed_scrapes)} failed")
+            return {"final_report": error_msg}
+        
+        task_results_json = json.dumps(cleaned_task_results, indent=2)
         if len(task_results_json) > 50000:
             print(f"[Final Report] Truncating task results from {len(task_results_json)} to 50000 chars")
             task_results_json = task_results_json[:50000] + "\n... [truncated]"
@@ -190,13 +250,18 @@ List of all sources used in this report:
         print(f"[Final Report] Report generated ({len(final_report)} chars)")
         
         # Safeguard: Truncate if absurdly long (prevent UI crash)
-        if len(final_report) > 24000:
-             print(f"[Final Report] WARNING: Report too long ({len(final_report)} chars). Truncating to 24000.")
-             final_report = final_report[:24000] + "\n\n[Report truncated due to excessive length]"
+        if len(final_report) > 50000:
+             print(f"[Final Report] WARNING: Report too long ({len(final_report)} chars). Truncating to 50000.")
+             final_report = final_report[:50000] + "\n\n[Report truncated due to excessive length]"
         
         # Save report to database
         try:
             print(f"[Final Report] Saving report to database (session_id: {session_id}, report_id: {report_id})...")
+            
+            # Emit saving status
+            state["agent_status"] = "saving_report"
+            state["agent_message"] = "Saving report to database..."
+            
             db = DatabaseService()
             await db.save_report(query=query, content=final_report, session_id=session_id, report_id=report_id)
             print("[Final Report] Report saved to database")
@@ -204,8 +269,17 @@ List of all sources used in this report:
         except Exception as e:
             print(f"[Final Report] Error saving to database: {e}")
 
+        # Emit completion status
+        state["agent_status"] = "completed"
+        state["agent_message"] = "Final report generated successfully"
+
         return {"final_report": final_report.strip()}
         
     except Exception as e:
         print(f"[Final Report] Error: {e}")
+        
+        # Emit error status
+        state["agent_status"] = "error"
+        state["agent_message"] = f"Report generation failed: {str(e)}"
+        
         return {"final_report": None, "error": str(e)}

@@ -49,9 +49,16 @@ async def sentiment_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> D
     
     if not product_data:
         print("[Sentiment Agent] No product data for analysis")
+        state["agent_status"] = "error"
+        state["agent_message"] = "No product data for sentiment analysis"
         return {"sentiment": None, "error": "No product data"}
     
-    print(f"[Sentiment Agent] Analyzing sentiment for: {product_data.get('title', 'Unknown')}")
+    product_title = product_data.get('title', 'Unknown Product')
+    print(f"[Sentiment Agent] Analyzing sentiment for: {product_title}")
+    
+    # Emit sentiment analysis start status
+    state["agent_status"] = "analyzing"
+    state["agent_message"] = f"Analyzing sentiment for: {product_title}"
     
     try:
         # Build prompt for sentiment analysis
@@ -88,6 +95,10 @@ Be objective and data-driven."""
         
         print(f"[Sentiment Agent] Sentiment: {sentiment.overall} (score: {sentiment.score})")
         
+        # Emit sentiment analysis completion status
+        state["agent_status"] = "completed"
+        state["agent_message"] = f"Sentiment analysis completed: {sentiment.overall}"
+        
         return {
             "sentiment": sentiment.model_dump(),
             "rating": product_data.get("rating"),
@@ -96,4 +107,9 @@ Be objective and data-driven."""
         
     except Exception as e:
         print(f"[Sentiment Agent] Error: {e}")
+        
+        # Emit error status
+        state["agent_status"] = "error"
+        state["agent_message"] = f"Sentiment analysis failed: {str(e)}"
+        
         return {"sentiment": None, "error": str(e)}

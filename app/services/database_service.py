@@ -21,15 +21,25 @@ class DatabaseService:
         """Explicitly connect to database and initialize schema"""
         if not self.conn:
             self.conn = await asyncpg.connect(self.db_url)
-            await register_vector(self.conn)
+            try:
+                await register_vector(self.conn)
+            except Exception as e:
+                print(f"[DatabaseService] Warning: Could not register vector type: {e}")
+                print("[DatabaseService] Continuing without vector support...")
             await self.init_db()
         return self
 
     async def init_db(self):
         # Create tables if they don't exist
+        try:
+            # Try to create vector extension (may fail if not available)
+            await self.conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        except Exception as e:
+            print(f"[DatabaseService] Warning: Could not create vector extension: {e}")
+            print("[DatabaseService] Tables will be created without vector columns...")
+        
+        # Create tables - make vector columns optional
         await self.conn.execute("""
-            CREATE EXTENSION IF NOT EXISTS vector;
-            
             CREATE TABLE IF NOT EXISTS chat_sessions (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -48,8 +58,7 @@ class DatabaseService:
                 session_id UUID REFERENCES chat_sessions(id),
                 query TEXT NOT NULL,
                 content TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                embedding vector(768)
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             
             CREATE TABLE IF NOT EXISTS products (
@@ -59,10 +68,21 @@ class DatabaseService:
                 description TEXT,
                 price TEXT,
                 details JSONB,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                embedding vector(768)
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        
+        # Try to add vector columns if extension is available
+        try:
+            await self.conn.execute("""
+                ALTER TABLE research_reports 
+                ADD COLUMN IF NOT EXISTS embedding vector(768);
+                
+                ALTER TABLE products 
+                ADD COLUMN IF NOT EXISTS embedding vector(768);
+            """)
+        except Exception as e:
+            print(f"[DatabaseService] Warning: Could not add vector columns: {e}")
 
     async def generate_embedding(self, text: str) -> List[float]:
         return await self.embeddings.aembed_query(text)

@@ -35,8 +35,17 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "18000"))  # Gemini 2.5 Flash max output
     
+    # Database Configuration
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5433/ecommerce_agent")
+    
     # Application Settings
     DEBUG: bool = os.getenv("DEBUG", "True").lower() == "true"
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Debug: Print where DATABASE_URL is coming from
+        print(f"[Config] DATABASE_URL from env: {os.getenv('DATABASE_URL', 'NOT SET')}")
+        print(f"[Config] DATABASE_URL final value: {self.DATABASE_URL}")
     
     class Config:
         case_sensitive = True

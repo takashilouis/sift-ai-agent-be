@@ -10,8 +10,11 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 class DatabaseService:
     def __init__(self):
-        self.db_url = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5433/ecommerce_agent")
+        self.db_url = settings.DATABASE_URL
         self.conn = None
+        # Debug: Print the database URL (mask password)
+        masked_url = self.db_url.replace(self.db_url.split('@')[0].split(':')[-1], '****') if '@' in self.db_url else self.db_url
+        print(f"[DatabaseService] Using database URL: {masked_url}")
         self.embeddings = GoogleGenerativeAIEmbeddings(
             model="models/embedding-001",
             google_api_key=settings.GEMINI_API_KEY

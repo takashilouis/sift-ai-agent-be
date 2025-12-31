@@ -79,6 +79,9 @@ async def chat_endpoint(request: ChatRequest):
                 if kind == "on_chat_model_stream":
                     content = event["data"]["chunk"].content
                     if content:
+                        # Handle both string and list content
+                        if isinstance(content, list):
+                            content = " ".join(str(c) for c in content)
                         full_response += content
                         yield json.dumps({
                             "type": "content",

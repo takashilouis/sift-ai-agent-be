@@ -60,6 +60,10 @@ async def sentiment_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> D
     state["agent_status"] = "analyzing"
     state["agent_message"] = f"Analyzing sentiment for: {product_title}"
     
+    # Determine model based on deep_research flag
+    deep_research = state.get("deep_research", False)
+    model_name = "gemini-3-pro-preview" if deep_research else None
+    
     try:
         # Build prompt for sentiment analysis
         prompt = f"""Analyze the sentiment for this product based on all available information.
@@ -89,6 +93,7 @@ Be objective and data-driven."""
         sentiment = await run_llm_structured(
             prompt=prompt,
             response_model=SentimentAnalysis,
+            model=model_name,
             temperature=0.5,
             system_instruction=get_system_instruction("sentiment")
         )

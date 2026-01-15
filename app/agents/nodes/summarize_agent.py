@@ -46,6 +46,10 @@ async def summarize_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> D
     state["agent_status"] = "summarizing"
     state["agent_message"] = f"Generating summary for: {product_title}"
     
+    # Determine model based on deep_research flag
+    deep_research = state.get("deep_research", False)
+    model_name = "gemini-3-pro-preview" if deep_research else None
+    
     try:
         # Build prompt for LLM
         prompt = f"""Analyze this product and provide a comprehensive summary.
@@ -65,6 +69,7 @@ Format as markdown with clear sections. Be concise but informative (300-400 word
         # Call LLM
         summary = await run_llm(
             prompt=prompt,
+            model=model_name,
             temperature=0.7,
             system_instruction=get_system_instruction("summarize")
         )

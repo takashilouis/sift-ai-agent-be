@@ -4,6 +4,7 @@ Final Report Agent Node
 Synthesizes all task results into a comprehensive final report using LLM.
 """
 
+from app.config import settings
 from typing import Dict, Any
 from app.agents.llm_router import run_llm
 from app.services.database_service import DatabaseService
@@ -125,19 +126,19 @@ Amazon and other e-commerce sites use anti-bot protection (captchas, rate limiti
                 error_msg += "No products could be scraped successfully.\n"
             
             print(f"[Final Report] Insufficient data: {valid_products_count} valid products, {len(failed_scrapes)} failed")
-            return {"final_report": error_msg}
-        
-        task_results_json = json.dumps(cleaned_task_results, indent=2)
-        if len(task_results_json) > 50000:
-            print(f"[Final Report] Truncating task results from {len(task_results_json)} to 50000 chars")
-            task_results_json = task_results_json[:50000] + "\n... [truncated]"
+            final_report = error_msg
+        else:
+            task_results_json = json.dumps(cleaned_task_results, indent=2)
+            if len(task_results_json) > 32000:
+                print(f"[Final Report] Truncating task results from {len(task_results_json)} to 32000 chars")
+                task_results_json = task_results_json[:32000] + "\n... [truncated]"
 
-        # Determine target length and model based on mode
-        target_length = "1100-2000 words" if deep_research else "700-1600 words"
-        model_name = "gemini-2.5-pro" if deep_research else None  # None uses default (Flash)
-        
-        # Build comprehensive prompt with explicit guidelines
-        prompt = f"""Current Date: {datetime.now().strftime('%B %d, %Y')}
+            # Determine target length and model based on mode
+            target_length = "1200-2000 words" if deep_research else "700-1500 words"
+            model_name = "gemini-3-pro-preview" if deep_research else None  # None uses default (Flash)
+            
+            # Build comprehensive prompt with explicit guidelines
+            prompt = f"""Current Date: {datetime.now().strftime('%B %d, %Y')}
 
 Create a comprehensive research report based on the following analysis.
 
@@ -164,7 +165,7 @@ Create a comprehensive research report based on the following analysis.
 9. Present the information as a product research report, not a product existence investigation
 10. **IMPORTANT**: Include inline URL citations with bold retailer names
     - Extract the retailer/website name from the URL (e.g., Amazon, Best Buy, Target, eBay)
-    - Format as: "Product Name - $XX.XX (**[Amazon](URL)**)\" with bold blue link
+    - Format as: "Product Name - $XX.XX (**[Amazon](URL)**)" with bold blue link
     - For features: "Feature description (**[Best Buy](URL)**)"
     - For pricing: "$XX.XX at **[Target](URL)**"
     - Make retailer names BOLD and use markdown links: **[RetailerName](URL)**
@@ -238,19 +239,19 @@ List of all sources used in this report:
 - Total length: {target_length}
 - Include the References section with all URLs at the very end
 - **CRITICAL:** Do NOT include sections marked as "IMPORTANT" if you don't have the relevant data. Simply omit those sections from the report."""
-        
-        # Generate final report
-        final_report = await run_llm(
-            prompt=prompt,
-            model=model_name,
-            temperature=0.7,
-            max_tokens=18000
-        )
-        
-        print(f"[Final Report] Report generated ({len(final_report)} chars)")
+            
+            # Generate final report
+            final_report = await run_llm(
+                prompt=prompt,
+                model=model_name,
+                temperature=0.7,
+                max_tokens=8192
+            )
+            
+            print(f"[Final Report] Report generated ({len(final_report)} chars)")
         
         # Safeguard: Truncate if absurdly long (prevent UI crash)
-        if len(final_report) > 50000:
+        if len(final_report) > 40000:
              print(f"[Final Report] WARNING: Report too long ({len(final_report)} chars). Truncating to 50000.")
              final_report = final_report[:50000] + "\n\n[Report truncated due to excessive length]"
         

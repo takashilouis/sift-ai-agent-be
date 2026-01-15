@@ -56,6 +56,10 @@ async def compare_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dic
     state["agent_status"] = "comparing"
     state["agent_message"] = f"Comparing {len(products)} products"
     
+    # Determine model based on deep_research flag
+    deep_research = state.get("deep_research", False)
+    model_name = "gemini-3-pro-preview" if deep_research else None
+    
     try:
         # Build comparison prompt
         products_json = json.dumps(products, indent=2)
@@ -99,6 +103,7 @@ Format as markdown with tables where appropriate. Be objective and data-driven."
         # Call LLM
         comparison = await run_llm(
             prompt=prompt,
+            model=model_name,
             temperature=0.6,
             max_tokens=3000,
             system_instruction=get_system_instruction("compare")

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8000",
+        "https://sift-ai-agent-fe.vercel.app",
     ]
     
     # LLM API Keys (REQUIRED for production)
@@ -34,11 +35,11 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "8192"))  # Gemini 2.5 Flash max output
     
+    # Database Configuration
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5433/ecommerce_agent")
+    
     # Application Settings
     DEBUG: bool = os.getenv("DEBUG", "True").lower() == "true"
-    
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
     class Config:
         case_sensitive = True

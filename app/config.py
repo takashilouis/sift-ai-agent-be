@@ -33,7 +33,10 @@ class Settings(BaseSettings):
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-2.5-flash")
     PLANNER_MODEL: str = os.getenv("PLANNER_MODEL", "gemini-2.5-flash")
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
-    MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "18000"))  # Gemini 2.5 Flash max output
+    MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "8192"))  # Gemini 2.5 Flash max output
+    
+    # Database Configuration
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5433/ecommerce_agent")
     
     # Database Configuration
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5433/ecommerce_agent")

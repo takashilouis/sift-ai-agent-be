@@ -34,14 +34,31 @@ async def compare_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> Dic
                 prev_result = task_results.get(task_idx, {})
                 product_data = prev_result.get("product_data")
                 
-                if product_data:
-                    products.append(product_data)
+                # CRITICAL: Filter out failed scrapes and invalid data
+                if product_data and isinstance(product_data, dict):
+                    title = product_data.get("title", "")
+                    # Skip if scraping failed (captcha, access denied, etc.)
+                    if title and not any(fail_indicator in title.lower() for fail_indicator in 
+                                       ["access denied", "captcha", "error", "blocked", "unknown product"]):
+                        products.append(product_data)
+                    else:
+                        print(f"[Compare Agent] Skipping invalid product data: {title}")
     
     if len(products) < 2:
         print(f"[Compare Agent] Need at least 2 products, got {len(products)}")
+        state["agent_status"] = "error"
+        state["agent_message"] = f"Need at least 2 products for comparison, got {len(products)}"
         return {"comparison": None, "error": "Insufficient products for comparison"}
     
     print(f"[Compare Agent] Comparing {len(products)} products")
+    
+    # Emit comparison start status
+    state["agent_status"] = "comparing"
+    state["agent_message"] = f"Comparing {len(products)} products"
+    
+    # Determine model based on deep_research flag
+    deep_research = state.get("deep_research", False)
+    model_name = "gemini-3-pro-preview" if deep_research else None
     
     try:
         # Build comparison prompt
@@ -86,6 +103,7 @@ Format as markdown with tables where appropriate. Be objective and data-driven."
         # Call LLM
         comparison = await run_llm(
             prompt=prompt,
+            model=model_name,
             temperature=0.6,
             max_tokens=3000,
             system_instruction=get_system_instruction("compare")
@@ -96,6 +114,10 @@ Format as markdown with tables where appropriate. Be objective and data-driven."
         
         print(f"[Compare Agent] Comparison generated for: {', '.join(product_titles)}")
         
+        # Emit comparison completion status
+        state["agent_status"] = "completed"
+        state["agent_message"] = f"Comparison completed for {len(products)} products"
+        
         return {
             "comparison": comparison.strip(),
             "products_compared": product_titles,
@@ -104,4 +126,9 @@ Format as markdown with tables where appropriate. Be objective and data-driven."
         
     except Exception as e:
         print(f"[Compare Agent] Error: {e}")
+        
+        # Emit error status
+        state["agent_status"] = "error"
+        state["agent_message"] = f"Comparison failed: {str(e)}"
+        
         return {"comparison": None, "error": str(e)}

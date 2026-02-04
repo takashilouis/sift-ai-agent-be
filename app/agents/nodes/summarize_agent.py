@@ -35,9 +35,20 @@ async def summarize_agent_node(state: Dict[str, Any], task: Dict[str, Any]) -> D
     
     if not product_data:
         print("[Summarize Agent] No product data to summarize")
+        state["agent_status"] = "error"
+        state["agent_message"] = "No product data to summarize"
         return {"summary": None, "error": "No product data"}
     
-    print(f"[Summarize Agent] Generating summary for: {product_data.get('title', 'Unknown')}")
+    product_title = product_data.get('title', 'Unknown Product')
+    print(f"[Summarize Agent] Generating summary for: {product_title}")
+    
+    # Emit summarization start status
+    state["agent_status"] = "summarizing"
+    state["agent_message"] = f"Generating summary for: {product_title}"
+    
+    # Determine model based on deep_research flag
+    deep_research = state.get("deep_research", False)
+    model_name = "gemini-3-pro-preview" if deep_research else None
     
     try:
         # Build prompt for LLM
@@ -58,14 +69,24 @@ Format as markdown with clear sections. Be concise but informative (300-400 word
         # Call LLM
         summary = await run_llm(
             prompt=prompt,
+            model=model_name,
             temperature=0.7,
             system_instruction=get_system_instruction("summarize")
         )
         
         print(f"[Summarize Agent] Summary generated ({len(summary)} chars)")
         
+        # Emit summarization completion status
+        state["agent_status"] = "completed"
+        state["agent_message"] = f"Summary generated for: {product_title}"
+        
         return {"summary": summary.strip()}
         
     except Exception as e:
         print(f"[Summarize Agent] Error: {e}")
+        
+        # Emit error status
+        state["agent_status"] = "error"
+        state["agent_message"] = f"Summarization failed: {str(e)}"
+        
         return {"summary": None, "error": str(e)}

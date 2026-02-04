@@ -39,11 +39,20 @@ async def research_product(request: ResearchRequest):
         
         # Stream the graph execution
         async def generate():
+            import time
+            start_time = time.time()
+            print(f"[Research] Starting research at {time.strftime('%H:%M:%S', time.localtime(start_time))}")
+            
             # Yield report ID as first chunk
             yield json.dumps({"type": "report_id", "report_id": report_id}) + "\n"
             
-            async for chunk in stream_graph_output(research_graph, initial_state):
-                yield chunk
+            try:
+                async for chunk in stream_graph_output(research_graph, initial_state):
+                    yield chunk
+            finally:
+                end_time = time.time()
+                duration = end_time - start_time
+                print(f"[Research] Report generation took {duration:.2f} seconds")
         
         return StreamingResponse(
             generate(),

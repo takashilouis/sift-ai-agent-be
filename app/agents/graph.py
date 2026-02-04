@@ -63,13 +63,28 @@ async def task_executor_node(state: AgentState) -> AgentState:
     
     if current_idx >= len(tasks):
         print("[Task Executor] All tasks completed")
+        state["node_status"] = "completed"
+        state["node_message"] = "All tasks completed"
         return state
     
     # Get current task
     task = tasks[current_idx]
     action = task.get("action")
+    description = task.get("description", "")
+    query = task.get("query", "")
     
-    print(f"[Task Executor] Executing task {current_idx}: {action}")
+    # Emit task start status
+    task_desc = description or query or f"{action} task"
+    state["node_status"] = "executing"
+    state["node_message"] = f"Starting {action}: {task_desc}"
+    state["current_task_info"] = {
+        "index": current_idx,
+        "total": len(tasks),
+        "action": action,
+        "description": task_desc
+    }
+    
+    print(f"[Task Executor] Executing task {current_idx}/{len(tasks)}: {action}")
     
     # Dispatch to appropriate agent
     agent_func = AGENT_DISPATCH.get(action)
@@ -79,6 +94,8 @@ async def task_executor_node(state: AgentState) -> AgentState:
         state["task_results"][str(current_idx)] = {
             "error": f"Unknown action: {action}"
         }
+        state["node_status"] = "error"
+        state["node_message"] = f"Unknown action: {action}"
     else:
         try:
             # Execute agent
@@ -87,6 +104,10 @@ async def task_executor_node(state: AgentState) -> AgentState:
             # Store result
             state["task_results"][str(current_idx)] = result
             
+            # Emit task completion status
+            state["node_status"] = "completed"
+            state["node_message"] = f"Completed {action}: {task_desc}"
+            
             print(f"[Task Executor] Task {current_idx} completed")
             
         except Exception as e:
@@ -94,6 +115,8 @@ async def task_executor_node(state: AgentState) -> AgentState:
             state["task_results"][str(current_idx)] = {
                 "error": str(e)
             }
+            state["node_status"] = "error"
+            state["node_message"] = f"Failed {action}: {str(e)}"
     
     # Move to next task
     state["current_task_index"] = current_idx + 1

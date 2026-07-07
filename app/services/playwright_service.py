@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 from playwright.async_api import async_playwright, Browser, Page
 from bs4 import BeautifulSoup
 from app.agents.llm_router import run_llm_structured, get_system_instruction
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import asyncio
 import re
 
@@ -27,6 +27,11 @@ class ProductData(BaseModel):
     category: Optional[str] = None
     images: list[str] = Field(default_factory=list)
     reviews: list[str] = Field(default_factory=list)
+
+    @field_validator("reviews", mode="before")
+    @classmethod
+    def default_null_reviews(cls, value):
+        return [] if value is None else value
 
 from app.services.proxy_service import proxy_service
 

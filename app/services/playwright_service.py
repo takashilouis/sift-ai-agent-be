@@ -157,7 +157,6 @@ async def scrape_product_page(url: str, use_llm_extraction: bool = True) -> Dict
                         product_data = extract_with_selectors(url, html_content)
                     
                     await context.close()
-                    await browser.close()
                     return product_data.model_dump()
                     
                 except Exception as e:
@@ -167,7 +166,7 @@ async def scrape_product_page(url: str, use_llm_extraction: bool = True) -> Dict
                         await context.close()
                     # Continue loop to retry
             
-            await browser.close()
+            # All retries failed — browser will be cleaned up by async_playwright context
             
             # If all retries failed
             return {

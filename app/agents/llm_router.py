@@ -132,6 +132,19 @@ Respond with valid JSON matching this schema:
         
         # Parse and validate JSON
         response_dict = json.loads(response.text)
+
+        # Gemini sometimes returns a JSON array (e.g. when page has multiple products).
+        # Take the first element in that case.
+        if isinstance(response_dict, list):
+            if not response_dict:
+                raise ValueError("LLM returned an empty JSON array")
+            print(f"[LLM Router] Response was a list with {len(response_dict)} items — using first item")
+            response_dict = response_dict[0]
+
+        # Ensure we have a mapping before unpacking into the Pydantic model
+        if not isinstance(response_dict, dict):
+            raise ValueError(f"Expected a JSON object from LLM, got {type(response_dict).__name__}")
+
         validated_response = response_model(**response_dict)
         
         return validated_response

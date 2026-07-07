@@ -98,47 +98,69 @@ async def search_product_reviews(product_name: str, max_results: int = 10) -> Li
 
 async def extract_product_urls(search_results: List[Dict[str, Any]]) -> List[str]:
     """
-    Extract product URLs from search results
-    
+    Extract product URLs from search results.
+
+    First tries to find strict individual product pages (e.g. /dp/ on Amazon).
+    If none are found, falls back to accepting any URL from known e-commerce
+    domains so the scraper always has something to work with.
+
     Args:
         search_results: List of Tavily search results
-        
+
     Returns:
         List of product URLs
     """
-    urls = []
-    
+    strict_urls = []
+    fallback_urls = []
+
+    known_domains = [
+        "amazon.com", "bestbuy.com", "walmart.com", "target.com", "ebay.com"
+    ]
+
     for result in search_results:
         url = result.get("url")
-        if url and is_product_url(url):
-            urls.append(url)
-    
-    return urls
+        if not url:
+            continue
+        if is_product_url(url):
+            strict_urls.append(url)
+        elif any(domain in url for domain in known_domains):
+            fallback_urls.append(url)
+
+    if strict_urls:
+        return strict_urls
+
+    # Fallback: return any URL from a known e-commerce domain
+    print("[Search Service] No strict product URLs found — falling back to e-commerce domain URLs")
+    return fallback_urls
 
 
 def is_product_url(url: str) -> bool:
     """
-    Check if URL is likely a product page
-    
+    Check if URL is a specific product page (strict match).
+
     Args:
         url: URL to check
-        
+
     Returns:
-        True if likely a product page
+        True if URL points to a specific product page
     """
     import re
-    
-    # Common product URL patterns
+
     product_patterns = [
-        r"amazon\.com/.*/(dp|gp/product)/",
+        r"amazon\.com/.*/dp/",
+        r"amazon\.com/gp/product/",
+        r"amazon\.com/s\?",          # search listing pages
         r"bestbuy\.com/site/",
         r"walmart\.com/ip/",
+        r"walmart\.com/search",
         r"target\.com/p/",
+        r"target\.com/s\?",
         r"ebay\.com/itm/",
+        r"ebay\.com/sch/",
     ]
-    
+
     for pattern in product_patterns:
         if re.search(pattern, url, re.IGNORECASE):
             return True
-    
+
     return False

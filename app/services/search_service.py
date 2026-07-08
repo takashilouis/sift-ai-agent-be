@@ -7,6 +7,13 @@ Replaces mock search with actual web search capabilities.
 from typing import List, Dict, Any, Optional
 from tavily import TavilyClient
 from app.config import settings
+from app.services.serpapi_service import (
+    amazon_product_url,
+    extract_asin,
+    search_amazon_products,
+    serpapi_enabled,
+    should_use_amazon_search,
+)
 import asyncio
 
 
@@ -24,6 +31,12 @@ async def search_products(query: str, max_results: int = 5) -> List[Dict[str, An
     Raises:
         ValueError: If TAVILY_API_KEY is not configured
     """
+    if should_use_amazon_search(query) and serpapi_enabled():
+        try:
+            return await search_amazon_products(query, max_results=max_results)
+        except Exception as e:
+            print(f"[Search Service] SerpAPI Amazon search failed, falling back to Tavily: {e}")
+
     if not settings.TAVILY_API_KEY:
         raise ValueError("TAVILY_API_KEY is required but not configured")
     
@@ -119,6 +132,11 @@ async def extract_product_urls(search_results: List[Dict[str, Any]]) -> List[str
 
     for result in search_results:
         url = result.get("url")
+        asin = result.get("asin") or extract_asin(url or "")
+        if asin:
+            strict_urls.append(amazon_product_url(asin))
+            continue
+
         if not url:
             continue
         if is_product_url(url):
@@ -148,8 +166,8 @@ def is_product_url(url: str) -> bool:
 
     product_patterns = [
         r"amazon\.com/.*/dp/",
+        r"amazon\.com/dp/",
         r"amazon\.com/gp/product/",
-        r"amazon\.com/s\?",          # search listing pages
         r"bestbuy\.com/site/",
         r"walmart\.com/ip/",
         r"walmart\.com/search",

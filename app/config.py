@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     
     # Search API (REQUIRED for real search)
     TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
+    SERPAPI_API_KEY: str = os.getenv("SERPAPI_API_KEY", "")
+    SERPAPI_AMAZON_DOMAIN: str = os.getenv("SERPAPI_AMAZON_DOMAIN", "amazon.com")
     
     # LLM Configuration
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-2.5-flash")

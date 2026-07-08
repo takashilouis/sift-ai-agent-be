@@ -15,10 +15,28 @@ class DatabaseService:
         # Debug: Print the database URL (mask password)
         masked_url = self.db_url.replace(self.db_url.split('@')[0].split(':')[-1], '****') if '@' in self.db_url else self.db_url
         print(f"[DatabaseService] Using database URL: {masked_url}")
-        self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=settings.GEMINI_API_KEY
-        )
+        self.embedding_model = settings.EMBEDDING_MODEL.strip()
+        self.embedding_dimensions = settings.EMBEDDING_DIMENSIONS
+        self.embeddings = self._init_embeddings()
+
+    def _init_embeddings(self) -> Optional[GoogleGenerativeAIEmbeddings]:
+        if not settings.GEMINI_API_KEY:
+            print("[DatabaseService] Embeddings disabled: GEMINI_API_KEY is not configured")
+            return None
+
+        if not self.embedding_model or self.embedding_model.lower() in {"off", "false", "disabled", "none"}:
+            print("[DatabaseService] Embeddings disabled: EMBEDDING_MODEL is not configured")
+            return None
+
+        try:
+            return GoogleGenerativeAIEmbeddings(
+                model=self.embedding_model,
+                google_api_key=settings.GEMINI_API_KEY,
+                output_dimensionality=self.embedding_dimensions
+            )
+        except Exception as e:
+            print(f"[DatabaseService] Embeddings disabled: could not initialize {self.embedding_model}: {e}")
+            return None
 
     async def connect(self):
         """Explicitly connect to database and initialize schema"""
@@ -87,8 +105,25 @@ class DatabaseService:
         except Exception as e:
             print(f"[DatabaseService] Warning: Could not add vector columns: {e}")
 
-    async def generate_embedding(self, text: str) -> List[float]:
-        return await self.embeddings.aembed_query(text)
+    async def generate_embedding(self, text: str) -> Optional[List[float]]:
+        if not self.embeddings:
+            return None
+
+        try:
+            embedding = await self.embeddings.aembed_query(text)
+        except Exception as e:
+            print(f"[DatabaseService] Error generating embedding with {self.embedding_model}: {e}")
+            return None
+
+        if len(embedding) != self.embedding_dimensions:
+            print(
+                f"[DatabaseService] Embeddings disabled for this record: "
+                f"{self.embedding_model} returned {len(embedding)} dimensions, "
+                f"but database expects {self.embedding_dimensions}"
+            )
+            return None
+
+        return embedding
 
     async def create_session(self) -> str:
         await self.connect()
@@ -114,11 +149,7 @@ class DatabaseService:
     async def save_report(self, query: str, content: str, session_id: Optional[str] = None, embedding: List[float] = None, report_id: Optional[str] = None):
         await self.connect()
         if not embedding:
-            try:
-                embedding = await self.generate_embedding(content)
-            except Exception as e:
-                print(f"[DatabaseService] Error generating embedding: {e}")
-                pass
+            embedding = await self.generate_embedding(content)
 
         if embedding:
             if report_id:

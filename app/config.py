@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # LLM Configuration
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gemini-2.5-flash")
     PLANNER_MODEL: str = os.getenv("PLANNER_MODEL", "gemini-2.5-flash")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-2")
+    EMBEDDING_DIMENSIONS: int = int(os.getenv("EMBEDDING_DIMENSIONS", "768"))
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "8192"))  # Gemini 2.5 Flash max output
     

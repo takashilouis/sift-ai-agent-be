@@ -9,6 +9,11 @@ from playwright.async_api import async_playwright, Browser, Page
 from bs4 import BeautifulSoup
 from app.agents.llm_router import run_llm_structured, get_system_instruction
 from pydantic import BaseModel, Field, field_validator
+from app.services.serpapi_service import (
+    get_amazon_product,
+    is_amazon_url_or_asin,
+    serpapi_enabled,
+)
 import asyncio
 import re
 
@@ -47,6 +52,13 @@ async def scrape_product_page(url: str, use_llm_extraction: bool = True) -> Dict
         Product data dictionary
     """
     print(f"[Playwright Service] Scraping URL: {url}")
+
+    if is_amazon_url_or_asin(url) and serpapi_enabled():
+        try:
+            print(f"[Playwright Service] Using SerpAPI Amazon Product API for: {url}")
+            return await get_amazon_product(url)
+        except Exception as e:
+            print(f"[Playwright Service] SerpAPI Amazon Product API failed, falling back to Playwright: {e}")
     
     try:
         async with async_playwright() as p:
